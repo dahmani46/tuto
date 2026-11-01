@@ -28,6 +28,8 @@
       }
       .items[data-moved] .item {
         transform: translateX(110%) scale(0.95);
+        /* leading (rightmost) card leaves first so cards never overlap */
+        transition-delay: calc((var(--n) - 1 - var(--i)) * 50ms);
       }
       @keyframes item-enter {
         from {
@@ -81,7 +83,7 @@
     </style>
   </head>
   <body>
-    <div class="items">
+    <div class="items" style="--n: 3">
       <div class="item item1" style="--i: 0">
         <img
           src="https://images.unsplash.com/photo-1721679241840-05534f295cf1?w=500&auto=format&fit=crop&q=60&ixlib=rb-4.0.3&ixid=M3wxMjA3fDB8MHxmZWF0dXJlZC1waG90b3MtZmVlZHwzOXx8fGVufDB8fHx8fA%3D%3D"
