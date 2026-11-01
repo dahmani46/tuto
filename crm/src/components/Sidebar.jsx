@@ -4,10 +4,10 @@ import { duration, easeDrawer } from "../motion.js";
 
 const links = ["Tableau de bord", "Biens", "Clients", "Visites", "Mandats", "Paramètres"];
 
-function Nav({ active, onNavigate }) {
+function Nav({ brand, active, onNavigate }) {
   return (
     <nav aria-label="Navigation principale">
-      <p className="brand">CRM Immo</p>
+      <p className="brand">{brand}</p>
       <ul className="nav">
         {links.map((l) => (
           <li key={l}>
@@ -29,7 +29,7 @@ function Nav({ active, onNavigate }) {
 
 // Desktop: the sidebar is always there, nothing to animate.
 // Small screens: it becomes a drawer that slides in from the edge it lives on.
-export default function Sidebar({ isDrawer, open, onClose, active, onNavigate, returnFocus }) {
+export default function Sidebar({ brand, isDrawer, open, onClose, active, onNavigate, returnFocus }) {
   const reduce = useReducedMotion();
   const panel = useRef(null);
   const t = { duration: duration.drawer, ease: easeDrawer };
@@ -45,7 +45,7 @@ export default function Sidebar({ isDrawer, open, onClose, active, onNavigate, r
   if (!isDrawer) {
     return (
       <aside className="sidebar">
-        <Nav active={active} onNavigate={onNavigate} />
+        <Nav brand={brand} active={active} onNavigate={onNavigate} />
       </aside>
     );
   }
@@ -74,6 +74,7 @@ export default function Sidebar({ isDrawer, open, onClose, active, onNavigate, r
             transition={t}
           >
             <Nav
+              brand={brand}
               active={active}
               onNavigate={(l) => {
                 onNavigate(l);

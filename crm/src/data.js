@@ -10,7 +10,35 @@ export const initialProperties = [
   { id: 6, title: "Mas provençal", city: "Aix-en-Provence", price: 890000, surface: 180, rooms: 7, status: "Sous offre", image: img("photo-1512917774080-9991f1c4c750") },
 ];
 
-export const visitsThisWeek = 18;
+export const initialVisits = [
+  { id: 1, day: "Lun. 2 nov.", time: "10:00", propertyId: 3, client: "Camille Laurent", status: "Confirmée" },
+  { id: 2, day: "Lun. 2 nov.", time: "15:30", propertyId: 2, client: "Hugo Martin", status: "Confirmée" },
+  { id: 3, day: "Mar. 3 nov.", time: "11:00", propertyId: 1, client: "Sarah Bernard", status: "À confirmer" },
+  { id: 4, day: "Mer. 4 nov.", time: "09:30", propertyId: 5, client: "Lucas Petit", status: "Confirmée" },
+  { id: 5, day: "Mer. 4 nov.", time: "17:00", propertyId: 6, client: "Inès Moreau", status: "À confirmer" },
+  { id: 6, day: "Jeu. 5 nov.", time: "14:00", propertyId: 3, client: "Nora Dubois", status: "Confirmée" },
+  { id: 7, day: "Ven. 6 nov.", time: "10:30", propertyId: 1, client: "Camille Laurent", status: "À confirmer" },
+];
+
+export const clients = [
+  { id: 1, name: "Camille Laurent", type: "Acheteur", project: "Budget 450 000 €", status: "Actif", last: "Hier" },
+  { id: 2, name: "Hugo Martin", type: "Acheteur", project: "Budget 480 000 €", status: "Actif", last: "Aujourd'hui" },
+  { id: 3, name: "Sarah Bernard", type: "Acheteur", project: "Budget 1 300 000 €", status: "À rappeler", last: "Il y a 5 jours" },
+  { id: 4, name: "Lucas Petit", type: "Acheteur", project: "Budget 290 000 €", status: "Actif", last: "Il y a 2 jours" },
+  { id: 5, name: "Inès Moreau", type: "Acheteur", project: "Budget 900 000 €", status: "Actif", last: "Il y a 3 jours" },
+  { id: 6, name: "Nora Dubois", type: "Locataire", project: "Loyer max 1 200 €", status: "Actif", last: "Il y a 4 jours" },
+  { id: 7, name: "Marc Fontaine", type: "Vendeur", project: "Vend : Loft industriel", status: "Clos", last: "Il y a 3 semaines" },
+  { id: 8, name: "Julie Garnier", type: "Vendeur", project: "Vend : Maison familiale", status: "À rappeler", last: "Il y a 8 jours" },
+];
+
+export const mandates = [
+  { id: 1, propertyId: 1, type: "Exclusif", start: "12 sept. 2026", end: "12 mars 2027", commission: "4 %", status: "Actif" },
+  { id: 2, propertyId: 2, type: "Simple", start: "02 juil. 2026", end: "02 janv. 2027", commission: "5 %", status: "Actif" },
+  { id: 3, propertyId: 3, type: "Exclusif", start: "20 août 2026", end: "20 nov. 2026", commission: "4 %", status: "Expire bientôt" },
+  { id: 4, propertyId: 4, type: "Exclusif", start: "15 mars 2026", end: "15 sept. 2026", commission: "4,5 %", status: "Terminé" },
+  { id: 5, propertyId: 5, type: "Simple", start: "05 oct. 2026", end: "05 avr. 2027", commission: "5 %", status: "Actif" },
+  { id: 6, propertyId: 6, type: "Exclusif", start: "28 sept. 2026", end: "28 mars 2027", commission: "3,5 %", status: "Actif" },
+];
 
 export const euro = (n) =>
   new Intl.NumberFormat("fr-FR", { style: "currency", currency: "EUR", maximumFractionDigits: 0 }).format(n);

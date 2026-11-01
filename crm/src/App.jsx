@@ -1,10 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { MotionConfig } from "framer-motion";
 import Sidebar from "./components/Sidebar.jsx";
-import StatCard from "./components/StatCard.jsx";
-import PropertyGrid from "./components/PropertyGrid.jsx";
 import Modal from "./components/Modal.jsx";
-import { euro, initialProperties, visitsThisWeek } from "./data.js";
+import { Biens, Clients, Dashboard, Mandats, Parametres, Visites } from "./components/Pages.jsx";
+import { euro, initialProperties, initialVisits } from "./data.js";
 
 const int = (v) => Math.round(v).toLocaleString("fr-FR");
 const money = (v) => euro(Math.round(v));
@@ -23,7 +22,10 @@ function useIsSmallScreen() {
 }
 
 export default function App() {
-  const [properties, setProperties] = useState(initialProperties);
+  const [allProperties, setProperties] = useState(initialProperties);
+  const [visits, setVisits] = useState(initialVisits);
+  const [agencyName, setAgencyName] = useState("CRM Immo");
+  const [hideSold, setHideSold] = useState(false);
   const [modal, setModal] = useState(null); // { type: "detail", property } | { type: "new" }
   const [menuOpen, setMenuOpen] = useState(false);
   const [page, setPage] = useState("Tableau de bord");
@@ -38,15 +40,25 @@ export default function App() {
     modalTrigger.current = trigger;
     setModal(next);
   };
+  const openProperty = (p, el) => openModal({ type: "detail", property: p }, el);
 
-  const available = properties.filter((p) => p.status !== "Vendu");
-  const sold = properties.length - available.length;
+  const properties = hideSold ? allProperties.filter((p) => p.status !== "Vendu") : allProperties;
+  const available = allProperties.filter((p) => p.status !== "Vendu");
+  const sold = allProperties.length - available.length;
   const stats = [
     { label: "Biens en portefeuille", value: available.length, format: int },
     { label: "Valeur du portefeuille", value: available.reduce((s, p) => s + p.price, 0), format: money },
-    { label: "Visites cette semaine", value: visitsThisWeek, format: int },
-    { label: "Taux de vente", value: (sold / properties.length) * 100, format: percent },
+    { label: "Visites cette semaine", value: visits.length, format: int },
+    { label: "Taux de vente", value: (sold / allProperties.length) * 100, format: percent },
   ];
+
+  function scheduleVisit(property) {
+    setVisits((list) => [
+      ...list,
+      { id: Date.now(), day: "Ven. 6 nov.", time: "16:00", propertyId: property.id, client: "À définir", status: "À confirmer" },
+    ]);
+    closeModal();
+  }
 
   function addProperty(e) {
     e.preventDefault();
@@ -72,6 +84,7 @@ export default function App() {
     <MotionConfig reducedMotion="user">
       <div className="layout">
         <Sidebar
+          brand={agencyName}
           isDrawer={isSmall}
           open={menuOpen}
           onClose={closeMenu}
@@ -100,18 +113,19 @@ export default function App() {
             </button>
           </header>
 
-          <section className="stats" aria-label="Statistiques">
-            {stats.map((s) => (
-              <StatCard key={s.label} {...s} />
-            ))}
-          </section>
-
-          <section aria-labelledby="biens-title">
-            <h2 id="biens-title" className="section-title">
-              Biens récents
-            </h2>
-            <PropertyGrid properties={properties} onOpen={(p, el) => openModal({ type: "detail", property: p }, el)} />
-          </section>
+          {/* Keyed so each page remounts with a 120ms opacity fade: navigation is a tens-per-day action. */}
+          <div className="page" key={page}>
+            {page === "Tableau de bord" && (
+              <Dashboard stats={stats} properties={properties} visits={visits} onOpen={openProperty} goTo={setPage} />
+            )}
+            {page === "Biens" && <Biens properties={properties} onOpen={openProperty} />}
+            {page === "Clients" && <Clients />}
+            {page === "Visites" && <Visites visits={visits} properties={allProperties} />}
+            {page === "Mandats" && <Mandats properties={allProperties} />}
+            {page === "Paramètres" && (
+              <Parametres agencyName={agencyName} setAgencyName={setAgencyName} hideSold={hideSold} setHideSold={setHideSold} />
+            )}
+          </div>
         </main>
       </div>
 
@@ -121,7 +135,7 @@ export default function App() {
         title={modal?.property?.title ?? ""}
         returnFocus={modalTrigger}
       >
-        {modal?.property && <PropertyDetail property={modal.property} onClose={closeModal} />}
+        {modal?.property && <PropertyDetail property={modal.property} onClose={closeModal} onSchedule={scheduleVisit} />}
       </Modal>
 
       <Modal open={modal?.type === "new"} onClose={closeModal} title="Nouveau bien" returnFocus={modalTrigger}>
@@ -162,7 +176,7 @@ export default function App() {
   );
 }
 
-function PropertyDetail({ property: p, onClose }) {
+function PropertyDetail({ property: p, onClose, onSchedule }) {
   return (
     <div className="detail">
       {p.image && <img className="detail-img" src={p.image} alt="" onError={(e) => (e.currentTarget.hidden = true)} />}
@@ -177,7 +191,7 @@ function PropertyDetail({ property: p, onClose }) {
         <button type="button" className="btn btn-ghost" onClick={onClose}>
           Fermer
         </button>
-        <button type="button" className="btn">
+        <button type="button" className="btn" onClick={() => onSchedule(p)}>
           Planifier une visite
         </button>
       </div>

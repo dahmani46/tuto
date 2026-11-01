@@ -1,3 +1,4 @@
+import { useEffect, useState } from "react";
 import { motion, useReducedMotion } from "framer-motion";
 import { duration, easeOut, stagger } from "../motion.js";
 import { euro } from "../data.js";
@@ -18,12 +19,22 @@ function itemVariants(reduce) {
       };
 }
 
+// The staggered entrance is decorative and navigation/filtering happens many times a day:
+// it plays once per page load, then cards appear instantly.
+let entrancePlayed = false;
+
 export default function PropertyGrid({ properties, onOpen }) {
   const reduce = useReducedMotion();
   const item = itemVariants(reduce);
+  const [first] = useState(!entrancePlayed);
+  const [entered, setEntered] = useState(false);
+  useEffect(() => {
+    entrancePlayed = true;
+    setEntered(true);
+  }, []);
 
   return (
-    <motion.ul className="grid" variants={list} initial="hidden" animate="show">
+    <motion.ul className="grid" variants={list} initial={first && !entered ? "hidden" : false} animate="show">
       {properties.map((p) => (
         <motion.li key={p.id} variants={item}>
           <button type="button" className="card" onClick={(e) => onOpen(p, e.currentTarget)}>
