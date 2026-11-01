@@ -1,14 +1,8 @@
 document.addEventListener("DOMContentLoaded", () => {
-  const items = document.querySelectorAll(".item");
+  const items = document.querySelector(".items");
   const transformButton = document.getElementById("transformButton");
-  let transformed = false;
 
   transformButton.addEventListener("click", () => {
-    items.forEach((item) => {
-      item.style.transform = transformed
-        ? "translateX(0)"
-        : "translateX(1500px)";
-    });
-    transformed = !transformed;
+    items.toggleAttribute("data-moved");
   });
 });

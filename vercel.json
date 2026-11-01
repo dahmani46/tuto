@@ -1,0 +1,13 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": null,
+  "installCommand": "npm ci --prefix crm",
+  "buildCommand": "npm run build --prefix crm && mkdir -p out/cartes && cp -r crm/dist/. out/ && cp index.html app.js out/cartes/",
+  "outputDirectory": "out",
+  "headers": [
+    {
+      "source": "/assets/(.*)",
+      "headers": [{ "key": "Cache-Control", "value": "public, max-age=31536000, immutable" }]
+    }
+  ]
+}
