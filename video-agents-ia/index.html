@@ -1,0 +1,508 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Agents IA expliqués</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #05080f; }
+  body { display: flex; align-items: center; justify-content: center; }
+  canvas { width: min(100vw, calc(100vh * 16 / 9)); height: auto; display: block; }
+</style>
+</head>
+<body>
+<canvas id="scene" width="1920" height="1080"></canvas>
+<script>
+(() => {
+  const W = 1920, H = 1080, DURATION = 52;
+  const cv = document.getElementById('scene');
+  const ctx = cv.getContext('2d');
+  const FONT = '"Segoe UI", Inter, "DejaVu Sans", Arial, sans-serif';
+  const C = {
+    accent: '#38bdf8', accent2: '#a3e635', gold: '#fbbf24',
+    text: '#e2e8f0', muted: '#94a3b8', panel: '#0c1830',
+    skin: '#f1c27d', hair: '#2a1d14', shirt: '#2563eb', pants: '#1e293b', shoe: '#0f172a'
+  };
+  const TAU = Math.PI * 2;
+
+  // ---------- utilitaires ----------
+  const clamp = (v, a = 0, b = 1) => Math.min(b, Math.max(a, v));
+  const lerp = (a, b, t) => a + (b - a) * t;
+  const easeOut = t => { t = clamp(t); return 1 - Math.pow(1 - t, 3); };
+  const easeIO = t => { t = clamp(t); return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2; };
+  const frac = x => ((x % 1) + 1) % 1;
+  const angDist = (a, b) => { const d = ((a - b) % TAU + TAU) % TAU; return Math.min(d, TAU - d); };
+
+  function rr(x, y, w, h, r) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y);
+    ctx.arcTo(x + w, y, x + w, y + h, r);
+    ctx.arcTo(x + w, y + h, x, y + h, r);
+    ctx.arcTo(x, y + h, x, y, r);
+    ctx.arcTo(x, y, x + w, y, r);
+    ctx.closePath();
+  }
+  function circle(x, y, r) { ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); }
+  function text(s, x, y, size, color, weight = '400', align = 'left') {
+    ctx.font = `${weight} ${size}px ${FONT}`;
+    ctx.fillStyle = color;
+    ctx.textAlign = align;
+    ctx.textBaseline = 'alphabetic';
+    ctx.fillText(s, x, y);
+  }
+  function glowOn(color, blur) { ctx.shadowColor = color; ctx.shadowBlur = blur; }
+  function glowOff() { ctx.shadowColor = 'transparent'; ctx.shadowBlur = 0; }
+  function dot(x, y, r, color, blur = 18) {
+    ctx.save(); glowOn(color, blur); ctx.fillStyle = color; circle(x, y, r); ctx.fill(); ctx.restore();
+  }
+
+  // ---------- décor ----------
+  function background(t) {
+    const g = ctx.createLinearGradient(0, 0, 0, H);
+    g.addColorStop(0, '#0b1226');
+    g.addColorStop(1, '#04060d');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, W, H);
+
+    ctx.strokeStyle = 'rgba(56,189,248,0.05)';
+    ctx.lineWidth = 1;
+    for (let x = 0; x < W; x += 80) { ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, 1000); ctx.stroke(); }
+    const off = (t * 24) % 80;
+    for (let y = -off; y < 1000; y += 80) { ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke(); }
+
+    ctx.fillStyle = '#0a1020';
+    ctx.fillRect(0, 1000, W, H - 1000);
+    glowOn(C.accent, 20);
+    ctx.strokeStyle = 'rgba(56,189,248,0.55)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.moveTo(0, 1000); ctx.lineTo(W, 1000); ctx.stroke();
+    glowOff();
+  }
+
+  // Portique : poutre horizontale, deux pieds, projecteurs sous la poutre
+  function gantry(t) {
+    ctx.fillStyle = '#243247';
+    rr(120, 372, 1680, 18, 6); ctx.fill();
+    rr(160, 388, 18, 612, 4); ctx.fill();
+    rr(1742, 388, 18, 612, 4); ctx.fill();
+    BOARDS.forEach((b, i) => {
+      const cx = b.x + b.w / 2;
+      const pulse = 0.6 + 0.4 * Math.sin(t * 2 + i);
+      dot(cx, 394, 6, C.gold, 14 * pulse);
+    });
+  }
+
+  // ---------- panneaux ----------
+  const BOARDS = [
+    { x: 190, y: 72, w: 460, h: 300 },
+    { x: 730, y: 72, w: 460, h: 300 },
+    { x: 1270, y: 72, w: 460, h: 300 }
+  ];
+  const TITLES = ["PIPELINE D'UN AGENT", "BOUCLE D'EXÉCUTION", "STATISTIQUES D'USAGE"];
+
+  // Plan d'exposition : qui est mis en avant, à partir de quel moment
+  const SCHEDULE = [
+    { s: 0, i: -1 }, { s: 5, i: 0 }, { s: 15, i: 1 },
+    { s: 25, i: 2 }, { s: 36, i: 0 }, { s: 46, i: -1 }
+  ];
+  function activeAt(t) {
+    let cur = SCHEDULE[0], prev = SCHEDULE[0];
+    for (let k = 0; k < SCHEDULE.length; k++) {
+      if (t >= SCHEDULE[k].s) { prev = k > 0 ? SCHEDULE[k - 1] : SCHEDULE[k]; cur = SCHEDULE[k]; }
+    }
+    return { cur, prev };
+  }
+
+  // 1 — pipeline : objectif -> plan -> outils -> contrôle -> résultat
+  function pipeline(b, t) {
+    const labels = ['Objectif', 'Plan', 'Outils', 'Contrôle', 'Résultat'];
+    const steps = ['Reçoit un objectif', 'Découpe en étapes', 'Appelle ses outils', 'Vérifie le résultat', 'Livre la réponse'];
+    const cols = ['#38bdf8', '#a3e635', '#fbbf24', '#f472b6', '#c084fc'];
+    const y = b.y + 165, x0 = b.x + 62, dx = (b.w - 124) / 4;
+    const act = Math.floor(t / 1.4) % 5;
+
+    ctx.strokeStyle = 'rgba(56,189,248,0.25)';
+    ctx.lineWidth = 3;
+    for (let k = 0; k < 4; k++) {
+      const xa = x0 + k * dx + 30, xb = x0 + (k + 1) * dx - 30;
+      ctx.beginPath(); ctx.moveTo(xa, y); ctx.lineTo(xb, y); ctx.stroke();
+      dot(lerp(xa, xb, frac(t * 0.9 - k * 0.25)), y, 5, '#fde68a', 14);
+    }
+    for (let k = 0; k < 5; k++) {
+      const x = x0 + k * dx, on = k === act, c = cols[k];
+      ctx.save();
+      glowOn(c, on ? 26 : 0);
+      circle(x, y, 28);
+      ctx.fillStyle = on ? c : '#0f1f3a'; ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = c; ctx.stroke();
+      ctx.restore();
+      text(String(k + 1), x, y + 7, 20, on ? '#0b1226' : c, '700', 'center');
+      text(labels[k], x, y + 62, 17, on ? C.text : C.muted, on ? '700' : '400', 'center');
+    }
+    text(steps[act], b.x + b.w / 2, b.y + 258, 19, C.gold, '600', 'center');
+  }
+
+  // 2 — boucle : observer -> décider -> agir, avec une mémoire au centre
+  function loopBoard(b, t) {
+    const cx = b.x + b.w / 2, cy = b.y + 178, R = 82;
+    ctx.strokeStyle = 'rgba(56,189,248,0.3)';
+    ctx.lineWidth = 3;
+    ctx.setLineDash([6, 8]);
+    circle(cx, cy, R); ctx.stroke();
+    ctx.setLineDash([]);
+
+    const pa = -Math.PI / 2 + t * 1.2;
+    const base = ctx.globalAlpha;
+    for (let k = 12; k >= 1; k--) {
+      const ang = pa - k * 0.07;
+      ctx.globalAlpha = base * (1 - k / 13) * 0.7;
+      circle(cx + R * Math.cos(ang), cy + R * Math.sin(ang), 6 * (1 - k / 13));
+      ctx.fillStyle = C.accent2; ctx.fill();
+    }
+    ctx.globalAlpha = base;
+
+    const nodes = [
+      { l: 'Observer', a: -Math.PI / 2, c: '#38bdf8' },
+      { l: 'Décider', a: Math.PI / 6, c: '#fbbf24' },
+      { l: 'Agir', a: 5 * Math.PI / 6, c: '#a3e635' }
+    ];
+    for (const n of nodes) {
+      const x = cx + R * Math.cos(n.a), y = cy + R * Math.sin(n.a);
+      const on = angDist(pa, n.a) < 0.55;
+      ctx.save();
+      glowOn(n.c, on ? 28 : 0);
+      circle(x, y, 38);
+      ctx.fillStyle = on ? n.c : '#0f1f3a'; ctx.fill();
+      ctx.lineWidth = 4; ctx.strokeStyle = n.c; ctx.stroke();
+      ctx.restore();
+      text(n.l, x, y + 5, 14, on ? '#0b1226' : C.text, '700', 'center');
+    }
+    circle(cx, cy, 30);
+    ctx.lineWidth = 3; ctx.strokeStyle = C.gold; ctx.stroke();
+    text('Mémoire', cx, cy + 4, 12, C.gold, '600', 'center');
+    dot(cx + R * Math.cos(pa), cy + R * Math.sin(pa), 8, C.accent2, 20);
+    text("Recommence jusqu'au but", b.x + b.w / 2, b.y + 284, 17, C.muted, '400', 'center');
+  }
+
+  // 3 — statistiques : compteur, barres, anneau (valeurs illustratives)
+  function statsBoard(b, t) {
+    const p = t < 25 ? 1 : easeOut((t - 25) / 3);
+    text(`${Math.round(68 * p)} %`, b.x + 28, b.y + 98, 50, C.gold, '700');
+    text('tâches répétitives automatisées', b.x + 28, b.y + 124, 16, C.muted);
+
+    const months = ['Jan', 'Fév', 'Mar', 'Avr', 'Mai', 'Juin'];
+    const vals = [12, 19, 27, 38, 52, 68];
+    const base = b.y + 250;
+    ctx.fillStyle = 'rgba(148,163,184,0.4)';
+    ctx.fillRect(b.x + 34, base, 236, 2);
+    vals.forEach((v, i) => {
+      const q = t < 25 ? 1 : easeOut((t - 25 - i * 0.2) / 1.2);
+      const h = 120 * (v / 68) * q;
+      const x = b.x + 40 + i * 38;
+      ctx.fillStyle = i === 5 ? C.gold : C.accent;
+      rr(x, base - h, 24, Math.max(h, 0.01), 5); ctx.fill();
+      text(months[i], x + 12, base + 18, 13, C.muted, '400', 'center');
+    });
+
+    const dcx = b.x + 370, dcy = b.y + 170, r = 46;
+    ctx.lineWidth = 14;
+    ctx.strokeStyle = '#1e3a5f';
+    circle(dcx, dcy, r); ctx.stroke();
+    ctx.strokeStyle = C.accent2;
+    ctx.lineCap = 'round';
+    ctx.beginPath();
+    ctx.arc(dcx, dcy, r, -Math.PI / 2, -Math.PI / 2 + TAU * 0.92 * p);
+    ctx.stroke();
+    ctx.lineCap = 'butt';
+    text(`${Math.round(92 * p)} %`, dcx, dcy + 7, 20, C.text, '700', 'center');
+    text('réussite', dcx, dcy + r + 24, 15, C.muted, '400', 'center');
+    text('Données illustratives', b.x + b.w / 2, b.y + 292, 13, C.muted, '400', 'center');
+  }
+
+  // 1 bis — architecture multi-agents : agents -> orchestrateur -> résultat
+  function network(b, t) {
+    const names = ['Recherche', 'Rédaction', 'Données', 'Vérification'];
+    const hub = { x: b.x + 262, y: b.y + 172 };
+    const out = { x: b.x + 396, y: b.y + 172 };
+
+    names.forEach((n, k) => {
+      const py = b.y + 100 + k * 50, px = b.x + 24, pw = 130, ph = 30;
+      const sx = px + pw, sy = py;
+      ctx.strokeStyle = 'rgba(56,189,248,0.25)';
+      ctx.lineWidth = 3;
+      ctx.beginPath(); ctx.moveTo(sx, sy); ctx.lineTo(hub.x - 34, hub.y); ctx.stroke();
+      const u = frac(t * 0.7 + k * 0.25);
+      dot(lerp(sx, hub.x - 34, u), lerp(sy, hub.y, u), 4.5, '#fde68a', 12);
+      ctx.fillStyle = '#0f1f3a';
+      rr(px, py - ph / 2, pw, ph, 15); ctx.fill();
+      ctx.strokeStyle = C.accent; ctx.lineWidth = 2; ctx.stroke();
+      text(n, px + pw / 2, py + 5, 15, C.text, '600', 'center');
+    });
+
+    const pulse = 1 + 0.08 * Math.sin(t * 4);
+    ctx.save();
+    glowOn(C.accent, 24);
+    circle(hub.x, hub.y, 34 * pulse);
+    ctx.fillStyle = '#0f1f3a'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = C.accent; ctx.stroke();
+    ctx.restore();
+    text('ORCH', hub.x, hub.y + 5, 14, C.accent, '700', 'center');
+    text('Orchestrateur', hub.x, hub.y + 58, 14, C.muted, '400', 'center');
+
+    ctx.strokeStyle = 'rgba(163,230,53,0.3)'; ctx.lineWidth = 3;
+    ctx.beginPath(); ctx.moveTo(hub.x + 34, hub.y); ctx.lineTo(out.x - 22, out.y); ctx.stroke();
+    dot(lerp(hub.x + 34, out.x - 22, frac(t * 0.9)), hub.y, 5, '#fde68a', 14);
+
+    ctx.save();
+    glowOn(C.accent2, 16);
+    circle(out.x, out.y, 22);
+    ctx.fillStyle = '#0f1f3a'; ctx.fill();
+    ctx.lineWidth = 4; ctx.strokeStyle = C.accent2; ctx.stroke();
+    ctx.restore();
+    text('OK', out.x, out.y + 5, 13, C.accent2, '700', 'center');
+    text('Résultat', out.x, out.y + 46, 14, C.muted, '400', 'center');
+    text('Chaque agent a son rôle', b.x + b.w / 2, b.y + 276, 16, C.muted, '400', 'center');
+  }
+
+  function boardFrame(i, t, a, active, title, content) {
+    const b = BOARDS[i];
+    ctx.save();
+    ctx.globalAlpha = a * (0.97 + 0.03 * Math.sin(t * 31 + i * 1.7));
+    rr(b.x, b.y, b.w, b.h, 18);
+    ctx.fillStyle = C.panel; ctx.fill();
+    glowOn(active ? C.accent : 'rgba(0,0,0,0)', active ? 36 : 0);
+    ctx.lineWidth = active ? 5 : 3;
+    ctx.strokeStyle = active ? C.accent : '#2b5a82';
+    ctx.stroke();
+    glowOff();
+    text(`0${i + 1}`, b.x + 24, b.y + 38, 20, C.accent, '700');
+    text(title, b.x + 60, b.y + 38, 20, C.text, '600');
+    ctx.fillStyle = 'rgba(56,189,248,0.25)';
+    ctx.fillRect(b.x + 20, b.y + 52, b.w - 40, 2);
+
+    ctx.save();
+    rr(b.x + 6, b.y + 6, b.w - 12, b.h - 12, 14); ctx.clip();
+    content(b, t);
+    if (i === 0 && t >= 36 && t < 36.5) {
+      ctx.fillStyle = `rgba(255,255,255,${0.25 * (1 - (t - 36) / 0.5)})`;
+      ctx.fillRect(b.x, b.y, b.w, b.h);
+    }
+    ctx.restore();
+    ctx.restore();
+  }
+
+  function boards(t, ai) {
+    for (let i = 0; i < 3; i++) {
+      const boot = easeOut((t - 0.3 - i * 0.35) / 0.8);
+      const a = boot * (ai < 0 || i === ai ? 1 : 0.45);
+      if (a <= 0.001) continue;
+      if (i === 0) {
+        const title = t >= 36 ? 'ARCHITECTURE MULTI-AGENTS' : TITLES[0];
+        boardFrame(0, t, a, ai === 0, title, t >= 36 ? network : pipeline);
+      } else if (i === 1) {
+        boardFrame(1, t, a, ai === 1, TITLES[1], loopBoard);
+      } else {
+        boardFrame(2, t, a, ai === 2, TITLES[2], statsBoard);
+      }
+    }
+  }
+
+  // ---------- personnage ----------
+  const CX = 520, FEET = 1000;
+  const SH = { L: { x: CX - 62, y: 640 }, R: { x: CX + 62, y: 640 } };
+  const L1 = 95, L2 = 88;
+  const hands = { L: { x: 0, y: 0 }, R: { x: 0, y: 0 } };
+
+  // Bras L pointe le panneau 1 ; bras R pointe les panneaux 2 et 3
+  function armGoal(side, idx, t) {
+    const sw = Math.sin(t * 1.7 + (side === 'L' ? 0 : 2)) * 0.05;
+    if (idx >= 0 && ((idx === 0) === (side === 'L'))) {
+      const b = BOARDS[idx], sh = SH[side];
+      const th = Math.atan2(b.y + b.h * 0.62 - sh.y, b.x + b.w / 2 - sh.x) + sw * 0.3;
+      return { a1: th, a2: th };
+    }
+    const base = side === 'L' ? Math.PI / 2 + 0.22 : Math.PI / 2 - 0.22;
+    return { a1: base + sw, a2: base + 0.32 + sw };
+  }
+  function armPose(side, t, cur, prev) {
+    const g1 = armGoal(side, cur.i, t);
+    const g0 = armGoal(side, prev.i, t);
+    const k = prev === cur ? 1 : easeIO((t - cur.s) / 0.8);
+    return { a1: lerp(g0.a1, g1.a1, k), a2: lerp(g0.a2, g1.a2, k) };
+  }
+
+  function man(t, cur, prev, alpha) {
+    ctx.save();
+    ctx.globalAlpha *= alpha;
+    const bob = Math.sin(t * 2.2) * 2.5;
+
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.beginPath(); ctx.ellipse(CX, FEET + 2, 120, 16, 0, 0, TAU); ctx.fill();
+
+    ctx.translate(0, bob);
+    ctx.fillStyle = C.pants;
+    rr(CX - 58, 820, 48, 158, 16); ctx.fill();
+    rr(CX + 10, 820, 48, 158, 16); ctx.fill();
+    ctx.fillStyle = C.shoe;
+    rr(CX - 76, 976, 70, 24, 10); ctx.fill();
+    rr(CX + 6, 976, 70, 24, 10); ctx.fill();
+
+    ctx.fillStyle = C.shirt;
+    rr(CX - 78, 612, 156, 232, 40); ctx.fill();
+    ctx.fillStyle = '#1d4ed8';
+    rr(CX - 14, 612, 28, 232, 10); ctx.fill();
+    ctx.fillStyle = C.gold;
+    circle(CX + 40, 676, 18); ctx.fill();
+    text('AI', CX + 40, 681, 13, '#0b1226', '700', 'center');
+
+    ctx.fillStyle = C.skin;
+    rr(CX - 16, 580, 32, 46, 8); ctx.fill();
+    circle(CX, 545, 46); ctx.fill();
+    ctx.fillStyle = C.hair;
+    ctx.beginPath(); ctx.arc(CX, 540, 48, Math.PI * 1.02, Math.PI * 1.98); ctx.closePath(); ctx.fill();
+    ctx.fillStyle = '#0f172a';
+    circle(CX - 16, 548, 5); ctx.fill();
+    circle(CX + 16, 548, 5); ctx.fill();
+    ctx.fillStyle = '#7f1d1d';
+    ctx.beginPath(); ctx.ellipse(CX, 570, 11, 2 + 4 * Math.abs(Math.sin(t * 10)), 0, 0, TAU); ctx.fill();
+
+    for (const side of ['L', 'R']) {
+      const sh = SH[side];
+      const p = armPose(side, t, cur, prev);
+      const ex = sh.x + Math.cos(p.a1) * L1, ey = sh.y + Math.sin(p.a1) * L1;
+      const hx = ex + Math.cos(p.a2) * L2, hy = ey + Math.sin(p.a2) * L2;
+      hands[side] = { x: hx, y: hy + bob };
+      ctx.strokeStyle = C.shirt;
+      ctx.lineWidth = 26; ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+      ctx.beginPath(); ctx.moveTo(sh.x, sh.y); ctx.lineTo(ex, ey); ctx.lineTo(hx, hy); ctx.stroke();
+      ctx.fillStyle = C.skin;
+      circle(hx, hy, 15); ctx.fill();
+    }
+    ctx.restore();
+  }
+
+  // Pointeur : ligne en pointillés du bras vers le panneau mis en avant
+  function laser(t, idx) {
+    const side = idx === 0 ? 'L' : 'R';
+    const h = hands[side], b = BOARDS[idx];
+    const tx = b.x + b.w / 2, ty = b.y + b.h * 0.62;
+    ctx.save();
+    ctx.setLineDash([10, 12]);
+    ctx.lineDashOffset = -t * 90;
+    ctx.strokeStyle = 'rgba(251,191,36,0.6)';
+    ctx.lineWidth = 3;
+    glowOn('#fbbf24', 12);
+    ctx.beginPath(); ctx.moveTo(h.x, h.y); ctx.lineTo(tx, ty); ctx.stroke();
+    ctx.restore();
+    dot(tx, ty, 9 + 3 * Math.sin(t * 6), '#fbbf24', 24);
+  }
+
+  // ---------- écran au sol : journal d'exécution qui défile ----------
+  const LOG = [
+    ['09:00:01  objectif reçu', C.muted],
+    ['09:00:02  plan : 4 étapes', C.muted],
+    ['09:00:03  outil → recherche()', C.accent],
+    ['09:00:05  résultat reçu', C.muted],
+    ['09:00:06  contrôle : cohérent', C.accent2],
+    ['09:00:07  boucle 2 : observer', C.muted],
+    ['09:00:09  décision : rédiger', C.gold],
+    ['09:00:11  outil → rédaction()', C.accent],
+    ['09:00:13  contrôle : à corriger', '#f472b6'],
+    ['09:00:14  boucle 3 : corriger', C.muted],
+    ['09:00:16  objectif atteint  OK', C.accent2]
+  ];
+  function screen(t) {
+    const x = 1090, y = 548, w = 600, h = 360;
+    ctx.fillStyle = '#1e293b';
+    rr(x + 280, y + h, 40, 40, 6); ctx.fill();
+    rr(x + 200, y + h + 36, 200, 14, 6); ctx.fill();
+    ctx.save();
+    rr(x, y, w, h, 18);
+    ctx.fillStyle = '#060b18'; ctx.fill();
+    glowOn(C.accent, 24);
+    ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(56,189,248,0.8)'; ctx.stroke();
+    glowOff();
+    ctx.clip();
+    text('JOURNAL D’EXÉCUTION', x + 28, y + 42, 16, C.accent, '700');
+    ctx.fillStyle = 'rgba(56,189,248,0.2)';
+    ctx.fillRect(x + 20, y + 58, w - 40, 1.5);
+    const shown = t < 6 ? 0 : Math.min(LOG.length, Math.floor((t - 6) / 1.2) + 1);
+    const first = Math.max(0, shown - 8);
+    ctx.font = `500 17px "DejaVu Sans Mono", Consolas, monospace`;
+    ctx.textAlign = 'left';
+    for (let k = first; k < shown; k++) {
+      ctx.fillStyle = LOG[k][1];
+      ctx.fillText(LOG[k][0], x + 28, y + 92 + (k - first) * 30);
+    }
+    if (t >= 6 && Math.floor(t * 2) % 2 === 0) {
+      ctx.fillStyle = C.accent2;
+      ctx.fillRect(x + 28, y + 92 + (shown - first) * 30 - 14, 10, 18);
+    }
+    ctx.restore();
+  }
+
+  // ---------- légendes et progression ----------
+  const CAPS = [
+    [0, 5, 'Comment fonctionnent les agents IA ?', true],
+    [5, 10, 'Un agent reçoit un objectif et le découpe en étapes.'],
+    [10, 15, 'Il choisit ses outils et contrôle chaque résultat.'],
+    [15, 20, 'Son fonctionnement est une boucle : observer, décider, agir.'],
+    [20, 25, "Puis il recommence jusqu'à atteindre son but."],
+    [25, 30, "Les chiffres d'usage montrent une adoption qui progresse vite."],
+    [30, 36, 'Chiffres illustratifs : à remplacer par vos propres mesures.'],
+    [36, 46, 'Plusieurs agents peuvent collaborer sous la coordination d’un orchestrateur.'],
+    [46, 52, 'En résumé : objectif, plan, outils, contrôle, boucle.']
+  ];
+  function captions(t) {
+    for (const [s, e, label, big] of CAPS) {
+      if (t < s || t >= e) continue;
+      const a = clamp(Math.min((t - s) / 0.4, (e - t) / 0.4));
+      const size = big ? 38 : 30;
+      ctx.save();
+      ctx.globalAlpha = a;
+      ctx.font = `600 ${size}px ${FONT}`;
+      const w = ctx.measureText(label).width + 90;
+      const x = (W - w) / 2, y = 1016, h = 56;
+      rr(x, y, w, h, 16);
+      ctx.fillStyle = 'rgba(8,12,24,0.9)'; ctx.fill();
+      ctx.strokeStyle = 'rgba(56,189,248,0.6)'; ctx.lineWidth = 2; ctx.stroke();
+      text(label, W / 2, y + 38, size, C.text, '600', 'center');
+      ctx.restore();
+    }
+  }
+
+  function draw(t) {
+    ctx.setTransform(1, 0, 0, 1, 0, 0);
+    ctx.globalAlpha = 1;
+    glowOff();
+    background(t);
+    gantry(t);
+    const { cur, prev } = activeAt(t);
+    boards(t, cur.i);
+    screen(t);
+    man(t, cur, prev, clamp(t / 1.2));
+    if (cur.i >= 0 && t >= 5) laser(t, cur.i);
+    captions(t);
+
+    ctx.fillStyle = 'rgba(148,163,184,0.5)';
+    ctx.font = `600 18px ${FONT}`;
+    ctx.fillText('AGENTS IA · EXPLICATION', 40, 58);
+    ctx.fillStyle = C.accent;
+    ctx.fillRect(0, 1077, W * (t / DURATION), 3);
+  }
+
+  // ---------- lecture ----------
+  let manual = false;
+  window.DURATION = DURATION;
+  window.renderAt = t => { manual = true; draw(t); };
+  const start = performance.now();
+  function loop(now) {
+    if (!manual) draw(((now - start) / 1000) % DURATION);
+    requestAnimationFrame(loop);
+  }
+  draw(0);
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
