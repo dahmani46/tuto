@@ -17,6 +17,8 @@ const outFile = process.argv[3] || path.join(__dirname, 'agents-ia.mp4');
   page.on('pageerror', e => errors.push(e.message));
   await page.goto('file://' + path.join(__dirname, 'index.html'));
   await page.waitForFunction(() => typeof window.renderAt === 'function');
+  // HIDE_MAN=1 : rend la scène sans le dessin (pour incruster une photo par-dessus)
+  if (process.env.HIDE_MAN) await page.evaluate(() => { window.HIDE_MAN = true; });
 
   const duration = await page.evaluate(() => window.DURATION);
   const total = Math.round(duration * FPS);

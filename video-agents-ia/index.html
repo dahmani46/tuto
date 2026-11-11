@@ -480,7 +480,12 @@
     const { cur, prev } = activeAt(t);
     boards(t, cur.i);
     screen(t);
-    man(t, cur, prev, clamp(t / 1.2));
+    if (window.HIDE_MAN) {
+      // Mode photo : le dessin est masqué, la photo détourée est incrustée par ffmpeg
+      hands.L = hands.R = { x: 610, y: 600 };
+    } else {
+      man(t, cur, prev, clamp(t / 1.2));
+    }
     if (cur.i >= 0 && t >= 5) laser(t, cur.i);
     captions(t);
 
